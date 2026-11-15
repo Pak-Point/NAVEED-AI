@@ -24,21 +24,37 @@ export default async (req) => {
     const input = "Preferred reply language: " + language + "\nConversation so far:\n" + transcript + "\nUser: " + message;
 
     let lastError = "All available Gemini models are temporarily unavailable.";
+    const deadline = Date.now() + 25000;
+
     for (const model of MODELS) {
-      const upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({ model, input, system_instruction: SYSTEM_PROMPT })
-      });
+      const remaining = deadline - Date.now();
+      if (remaining <= 500) break;
+
+      let upstream;
+      try {
+        upstream = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          body: JSON.stringify({ model, input, system_instruction: SYSTEM_PROMPT }),
+          signal: AbortSignal.timeout(Math.min(9000, remaining))
+        });
+      } catch (error) {
+        lastError = error?.name === "TimeoutError" || error?.name === "AbortError"
+          ? "Gemini request timed out while waiting for a response."
+          : "Could not connect to Gemini: " + (error?.message || "network error");
+        continue;
+      }
 
       const raw = await upstream.text();
       let result;
-      try { result = raw ? JSON.parse(raw) : {}; }
-      catch { return json({ error: "Gemini returned a non-JSON response (HTTP " + upstream.status + ")." }, 502); }
+      try {
+        result = raw ? JSON.parse(raw) : {};
+      } catch {
+        return json({ error: "Gemini returned a non-JSON response (HTTP " + upstream.status + ")." }, 502);
+      }
 
       if (!upstream.ok) {
         lastError = result?.error?.message || result?.message || ("Gemini API returned HTTP " + upstream.status);
-        // Try the next stable Flash model only for temporary capacity/rate-limit errors.
         if (upstream.status === 429 || upstream.status === 503 || upstream.status === 502) continue;
         return json({ error: lastError }, upstream.status);
       }
@@ -48,7 +64,7 @@ export default async (req) => {
       return json({ reply, model });
     }
 
-    return json({ error: "Gemini models are currently busy. Automatic fallback was attempted. Please try again shortly. Last error: " + lastError }, 503);
+    return json({ error: "Gemini did not respond in time or all fallback models were busy. Please try again. Details: " + lastError }, 504);
   } catch (error) {
     return json({ error: "Server error: " + (error?.message || "Unknown error") }, 500);
   }
