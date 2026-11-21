@@ -2,6 +2,9 @@ package com.naveedai.assistant
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
@@ -147,6 +150,11 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             setOnClickListener { toggleTorch() }
         })
 
+        root.addView(Button(this).apply {
+            text = "Firebase App Check Token دکھائیں"
+            setOnClickListener { showAppCheckToken() }
+        })
+
         root.addView(TextView(this).apply {
             text = "مثالیں: Hey Naveed • WhatsApp کھولو • وقت بتاؤ • پاکستان کی تاریخ بتاؤ"
             textSize = 13f
@@ -162,6 +170,28 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
 
     override fun onInit(result: Int) {
         if (result == TextToSpeech.SUCCESS) tts.setLanguage(Locale("ur", "PK"))
+    }
+
+
+    private fun showAppCheckToken() {
+        status.text = "Firebase App Check token حاصل کیا جا رہا ہے…"
+        FirebaseAppCheck.getInstance().getAppCheckToken(false)
+            .addOnSuccessListener { result ->
+                val token = result.token
+                AlertDialog.Builder(this)
+                    .setTitle("Firebase App Check Debug Token")
+                    .setMessage(token)
+                    .setPositiveButton("Copy") { _, _ ->
+                        val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("App Check Debug Token", token))
+                        status.text = "Token کاپی ہوگیا۔ اسے Firebase Console میں Debug token کے طور پر رجسٹر کریں۔"
+                    }
+                    .setNegativeButton("Close", null)
+                    .show()
+            }
+            .addOnFailureListener { error ->
+                status.text = "App Check token حاصل نہیں ہوا: " + (error.message ?: "Unknown error")
+            }
     }
 
     private fun listen() {
