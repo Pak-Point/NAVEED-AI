@@ -2,6 +2,10 @@ package com.naveedai.assistant
 
 import android.Manifest
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
+import android.os.Build
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -55,6 +59,13 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private val audioCode = 22
     private val cameraCode = 21
     private val mainHandler = Handler(Looper.getMainLooper())
+    private var wakeReceiverRegistered = false
+    private val wakeCommandReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val command = intent?.getStringExtra(WakeWordService.EXTRA_COMMAND).orEmpty()
+            if (command.isNotBlank()) processUserInput(command)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -172,6 +183,14 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         val scroll = ScrollView(this)
         scroll.addView(root)
         setContentView(scroll)
+        val wakeFilter = IntentFilter(WakeWordService.ACTION_COMMAND)
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(wakeCommandReceiver, wakeFilter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(wakeCommandReceiver, wakeFilter)
+        }
+        wakeReceiverRegistered = true
     }
 
     override fun onInit(result: Int) {
@@ -190,20 +209,31 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
             wakeMode = false
             waitingForWakeCommand = false
             recognizer?.cancel()
+            stopService(Intent(this, WakeWordService::class.java))
             status.text = "Hey Naveed بند ہے۔"
             say("وائس ایکٹیویشن بند کر دی گئی ہے۔")
             return
         }
-
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            wakeMode = true
             requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), audioCode)
             return
         }
+        startWakeWordService()
+    }
 
+    private fun startWakeWordService() {
         wakeMode = true
         waitingForWakeCommand = false
-        say("Hey Naveed فعال ہے۔ ایپ کھلی رکھیں اور کہیں Hey Naveed۔")
-        scheduleWakeListening(900)
+        val serviceIntent = Intent(this, WakeWordService::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(serviceIntent)
+            else startService(serviceIntent)
+            say("Hey Naveed فعال ہے۔ دوسری ایپس استعمال کرتے ہوئے بھی سننے کی سہولت آن ہے۔")
+        } catch (_: Exception) {
+            wakeMode = false
+            say("Background سروس شروع نہیں ہو سکی۔ اجازتیں چیک کریں۔")
+        }
     }
 
     private fun startRecognition(isWakeListening: Boolean) {
@@ -302,9 +332,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun scheduleWakeListening(delay: Long) {
-        mainHandler.postDelayed({
-            if (wakeMode && activityResumed) startRecognition(true)
-        }, delay)
+        // Background listening is handled by WakeWordService.
     }
 
     private fun processUserInput(raw: String) {
@@ -414,7 +442,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
             if (requestCode == audioCode) {
-                if (wakeMode) scheduleWakeListening(500) else listen()
+                if (wakeMode) startWakeWordService() else listen()
             }
             if (requestCode == cameraCode) toggleTorch()
         } else {
@@ -425,17 +453,21 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onResume() {
         super.onResume()
         activityResumed = true
-        if (wakeMode) scheduleWakeListening(800)
+        // Background listening is handled by WakeWordService.
     }
 
     override fun onPause() {
         activityResumed = false
-        recognizer?.cancel()
+        if (!wakeMode) recognizer?.cancel()
         super.onPause()
     }
 
     override fun onDestroy() {
         mainHandler.removeCallbacksAndMessages(null)
+        if (wakeReceiverRegistered) {
+            try { unregisterReceiver(wakeCommandReceiver) } catch (_: Exception) {}
+            wakeReceiverRegistered = false
+        }
         recognizer?.destroy()
         recognizer = null
         assistantScope.cancel()
