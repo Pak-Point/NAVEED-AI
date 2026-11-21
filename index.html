@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#07111f">
   <meta name="description" content="NAVEED AI - your personal Urdu, Saraiki and English assistant.">
   <title>NAVEED AI</title>
-  <link rel="manifest" href="/manifest.json">
+  <link rel="manifest" href="./manifest.json">
   <style>
     :root{color-scheme:dark;--bg:#07111f;--panel:#101d30;--line:#20334b;--cyan:#43d9ee;--muted:#9aacc2}
     *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -15%,#15385a 0,transparent 55%),var(--bg);color:#f4f8ff;font-family:system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
@@ -41,17 +41,18 @@
   </section>
 </div>
 <script>
+const API_URL='https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev';
 const messagesEl=document.getElementById('messages'),promptEl=document.getElementById('prompt'),sendBtn=document.getElementById('send'),micBtn=document.getElementById('mic'),hint=document.getElementById('hint');
 let history=[],voiceReplies=true,recognition=null;
 function addMessage(text,who,extra=''){document.getElementById('welcome')?.remove();const el=document.createElement('div');el.className='msg '+who+(extra?' '+extra:'');el.textContent=text;messagesEl.appendChild(el);messagesEl.scrollTop=messagesEl.scrollHeight;return el}
 function speak(text){if(!voiceReplies||!('speechSynthesis'in window))return;speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);const lang=document.getElementById('language').value;u.lang=lang==='English'?'en-US':lang==='Urdu'?'ur-PK':'ur-PK';speechSynthesis.speak(u)}
 async function send(){const text=promptEl.value.trim();if(!text)return;promptEl.value='';addMessage(text,'user');const loading=addMessage('Soch raha hoon…','bot');sendBtn.disabled=true;micBtn.disabled=true;
-try{const res=await fetch('/.netlify/functions/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,history:history.slice(-10),language:document.getElementById('language').value})});const raw=await res.text();let data={};try{data=raw?JSON.parse(raw):{}}catch{throw new Error('Server ne valid JSON jawab nahi diya (HTTP '+res.status+'). Mumkin hai function timeout ya deploy issue ho.')}if(!res.ok)throw new Error(data.error||('Server error (HTTP '+res.status+').'));if(!data.reply)throw new Error(data.error||'Gemini se khali jawab mila.');loading.textContent=data.reply;history.push({role:'user',text},{role:'assistant',text:data.reply});speak(data.reply)}catch(e){loading.textContent='Maazrat, abhi jawab nahi mil saka: '+(e.message||'Network error');loading.classList.add('error')}finally{sendBtn.disabled=false;micBtn.disabled=false;promptEl.focus()}}
+try{if(API_URL.includes('YOUR-WORKER-NAME'))throw new Error('Cloudflare Worker abhi connect nahi hua. Worker deploy karke API_URL set karein.');const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:text,history:history.slice(-10),language:document.getElementById('language').value})});const raw=await res.text();let data={};try{data=raw?JSON.parse(raw):{}}catch{throw new Error('Server ne valid JSON jawab nahi diya (HTTP '+res.status+'). Mumkin hai function timeout ya deploy issue ho.')}if(!res.ok)throw new Error(data.error||('Server error (HTTP '+res.status+').'));if(!data.reply)throw new Error(data.error||'Gemini se khali jawab mila.');loading.textContent=data.reply;history.push({role:'user',text},{role:'assistant',text:data.reply});speak(data.reply)}catch(e){loading.textContent='Maazrat, abhi jawab nahi mil saka: '+(e.message||'Network error');loading.classList.add('error')}finally{sendBtn.disabled=false;micBtn.disabled=false;promptEl.focus()}}
 sendBtn.addEventListener('click',send);promptEl.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});
 document.getElementById('speakToggle').addEventListener('click',e=>{voiceReplies=!voiceReplies;e.currentTarget.textContent=voiceReplies?'🔊':'🔇';if(!voiceReplies&&'speechSynthesis'in window)speechSynthesis.cancel()});
 document.getElementById('clear').addEventListener('click',()=>{history=[];messagesEl.innerHTML='<section class="welcome" id="welcome"><div class="orb">✧</div><h2>Assalam-o-Alaikum!</h2><p>New chat started. Aap kya poochna chahte hain?</p></section>'});
 const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SpeechRecognition){recognition=new SpeechRecognition();recognition.lang='ur-PK';recognition.interimResults=false;recognition.maxAlternatives=1;recognition.onstart=()=>{micBtn.textContent='⏺️';hint.textContent='Sun raha hoon… boliye';};recognition.onend=()=>{micBtn.textContent='🎙️';hint.textContent='Awaaz band. Apna message bhejein.'};recognition.onresult=e=>{promptEl.value=e.results[0][0].transcript;send()};recognition.onerror=e=>{hint.textContent='Voice error: '+e.error+'. Aap text type kar sakte hain.'};micBtn.addEventListener('click',()=>{try{recognition.start()}catch(e){hint.textContent='Microphone pehle se active hai.'}})}else{micBtn.disabled=true;hint.textContent='Is browser mein voice input supported nahi. Chrome mein try karein.'}
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 </script>
 </body></html>
