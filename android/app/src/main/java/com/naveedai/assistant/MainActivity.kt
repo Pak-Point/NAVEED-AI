@@ -18,7 +18,9 @@ import android.view.View
 import android.widget.*
 import com.google.firebase.Firebase
 import com.google.firebase.ai.GenerativeBackend
+import com.google.firebase.ai.ai
 import com.google.firebase.ai.GenerativeModel
+import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,8 +56,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tts = TextToSpeech(this, this)
-        Firebase.initialize(context = this)
-        Firebase.appCheck.installAppCheckProviderFactory(
+        FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
             DebugAppCheckProviderFactory.getInstance()
         )
         geminiModel = Firebase.ai(backend = GenerativeBackend.googleAI())
