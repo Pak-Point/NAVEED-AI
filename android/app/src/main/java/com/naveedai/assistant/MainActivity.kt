@@ -17,7 +17,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.*
 import com.google.firebase.Firebase
-import com.google.firebase.ai.GenerativeBackend
+import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.GenerativeModel
 import com.google.firebase.appcheck.FirebaseAppCheck
