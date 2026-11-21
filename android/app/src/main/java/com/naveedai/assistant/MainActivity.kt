@@ -2,6 +2,8 @@ package com.naveedai.assistant
 
 import android.Manifest
 import android.app.Activity
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.camera2.CameraCharacteristics
@@ -145,6 +147,16 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(Button(this).apply {
             text = "🔦 ٹارچ آن / آف"
             setOnClickListener { toggleTorch() }
+        })
+
+        root.addView(Button(this).apply {
+            text = "Firebase Debug Token کاپی کریں"
+            setOnClickListener {
+                val token = getString(R.string.firebase_app_check_debug_token)
+                val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Firebase App Check Debug Token", token))
+                status.text = "Debug Token کاپی ہوگیا۔ اسے Firebase App Check میں رجسٹر کریں۔"
+            }
         })
 
         root.addView(TextView(this).apply {
