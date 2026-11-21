@@ -16,6 +16,15 @@ import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
 import android.widget.*
+import com.google.firebase.Firebase
+import com.google.firebase.ai.GenerativeBackend
+import com.google.firebase.ai.GenerativeModel
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -27,7 +36,6 @@ import java.util.Locale
 class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private lateinit var status: TextView
     private lateinit var input: EditText
-    private lateinit var apiKeyInput: EditText
     private lateinit var tts: TextToSpeech
 
     private var recognizer: SpeechRecognizer? = null
@@ -36,6 +44,8 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     private var wakeMode = false
     private var waitingForWakeCommand = false
     private var activityResumed = false
+    private lateinit var geminiModel: GenerativeModel
+    private val assistantScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
     private val audioCode = 22
     private val cameraCode = 21
@@ -44,6 +54,12 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tts = TextToSpeech(this, this)
+        Firebase.initialize(context = this)
+        Firebase.appCheck.installAppCheckProviderFactory(
+            DebugAppCheckProviderFactory.getInstance()
+        )
+        geminiModel = Firebase.ai(backend = GenerativeBackend.googleAI())
+            .generativeModel("gemini-4-hydrogen")
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -123,47 +139,6 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         root.addView(Button(this).apply {
             text = "Gemini سے پوچھیں / حکم چلائیں"
             setOnClickListener { processUserInput(input.text.toString()) }
-        })
-
-        root.addView(TextView(this).apply {
-            text = "Gemini API Key (Google AI Studio سے حاصل کریں)"
-            textSize = 14f
-            setTextColor(0xFFB8C7D9.toInt())
-            setPadding(0, 18, 0, 4)
-        })
-
-        apiKeyInput = EditText(this).apply {
-            hint = "اپنی Gemini API Key یہاں Paste کریں"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or
-                android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
-            singleLine = true
-            setTextColor(-1)
-            setHintTextColor(0xFFB8C7D9.toInt())
-        }
-        root.addView(apiKeyInput, LinearLayout.LayoutParams(-1, -2))
-
-        root.addView(Button(this).apply {
-            text = "🔐 API Key محفوظ کریں"
-            setOnClickListener {
-                val key = apiKeyInput.text.toString().trim()
-                if (key.isBlank()) {
-                    say("پہلے API Key درج کریں۔")
-                } else {
-                    getSharedPreferences("naveed_settings", MODE_PRIVATE)
-                        .edit()
-                        .putString("gemini_api_key", key)
-                        .apply()
-                    apiKeyInput.text.clear()
-                    say("Gemini API Key اس فون میں محفوظ کر دی گئی ہے۔")
-                }
-            }
-        })
-
-        root.addView(Button(this).apply {
-            text = "Google AI Studio میں API Key حاصل کریں"
-            setOnClickListener {
-                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://aistudio.google.com/app/apikey")))
-            }
         })
 
         root.addView(Button(this).apply {
@@ -356,84 +331,24 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
     }
 
     private fun askGemini(question: String) {
-        val apiKey = getSharedPreferences("naveed_settings", MODE_PRIVATE)
-            .getString("gemini_api_key", null)
-
-        if (apiKey.isNullOrBlank()) {
-            say("Gemini استعمال کرنے کے لیے پہلے Google AI Studio کی API Key محفوظ کریں۔")
-            if (wakeMode) scheduleWakeListening(1000)
-            return
-        }
-
-        status.text = "Gemini سوچ رہا ہے…"
-        Thread {
-            var connection: HttpURLConnection? = null
+        status.text = "Firebase Gemini سوچ رہا ہے…"
+        assistantScope.launch {
             try {
-                val url = URL("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent")
-                connection = (url.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "POST"
-                    connectTimeout = 20000
-                    readTimeout = 40000
-                    doOutput = true
-                    setRequestProperty("Content-Type", "application/json; charset=UTF-8")
-                    setRequestProperty("x-goog-api-key", apiKey)
-                }
-
-                val prompt = "You are Naveed AI, a helpful personal Android assistant. " +
-                    "Reply in the same language as the user. You can reply in Urdu, Saraiki, or English. " +
-                    "Be clear, friendly, and concise. User message: " + question
-
-                val requestBody = JSONObject()
-                    .put(
-                        "contents",
-                        JSONArray().put(
-                            JSONObject().put(
-                                "parts",
-                                JSONArray().put(JSONObject().put("text", prompt))
-                            )
-                        )
-                    )
-                    .put("generationConfig", JSONObject().put("temperature", 0.7))
-
-                connection.outputStream.use {
-                    it.write(requestBody.toString().toByteArray(Charsets.UTF_8))
-                }
-
-                val responseCode = connection.responseCode
-                val responseText = if (responseCode in 200..299) {
-                    connection.inputStream.bufferedReader().use { it.readText() }
-                } else {
-                    connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
-                }
-
-                val json = JSONObject(responseText)
-                val answer = if (responseCode in 200..299) {
-                    json.optJSONArray("candidates")
-                        ?.optJSONObject(0)
-                        ?.optJSONObject("content")
-                        ?.optJSONArray("parts")
-                        ?.optJSONObject(0)
-                        ?.optString("text")
-                        .orEmpty()
-                } else {
-                    json.optJSONObject("error")?.optString("message")
-                        ?: "Gemini API نے جواب نہیں دیا۔ HTTP " + responseCode
-                }
-
-                runOnUiThread {
-                    if (answer.isNotBlank()) say(answer)
-                    else say("Gemini سے خالی جواب موصول ہوا۔")
-                    if (wakeMode) scheduleWakeListening(1200)
-                }
+                val prompt = "You are Naveed AI, the same assistant as Pak Point AI. " +
+                    "Reply in the same language as the user. Support Urdu, Saraiki, Roman Urdu, and English. " +
+                    "Be clear, friendly, accurate, and concise. Do not invent current facts. " +
+                    "User message: " + question
+                val response = geminiModel.generateContent(prompt)
+                val answer = response.text.orEmpty().trim()
+                if (answer.isNotBlank()) say(answer)
+                else say("Firebase Gemini سے خالی جواب موصول ہوا۔")
             } catch (e: Exception) {
-                runOnUiThread {
-                    say("Gemini سے رابطہ نہیں ہو سکا۔ انٹرنیٹ اور API Key چیک کریں۔")
-                    if (wakeMode) scheduleWakeListening(1200)
-                }
+                val detail = e.message?.take(220).orEmpty()
+                say("Firebase Gemini سے رابطہ نہیں ہو سکا۔ انٹرنیٹ، Firebase AI Logic اور App Check چیک کریں۔ " + detail)
             } finally {
-                connection?.disconnect()
+                if (wakeMode) scheduleWakeListening(1200)
             }
-        }.start()
+        }
     }
 
     private fun openApp(pkg: String, label: String) {
@@ -507,6 +422,7 @@ class MainActivity : Activity(), TextToSpeech.OnInitListener {
         mainHandler.removeCallbacksAndMessages(null)
         recognizer?.destroy()
         recognizer = null
+        assistantScope.cancel()
         if (::tts.isInitialized) tts.shutdown()
         super.onDestroy()
     }
