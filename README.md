@@ -1,20 +1,25 @@
 # NAVEED AI
 
-A mobile-friendly personal AI chat app with browser speech input and spoken replies.
+NAVEED AI is a mobile-friendly web assistant/PWA for Urdu, Roman Urdu, Saraiki and English. The Android project remains separate and is not changed by this web deployment.
 
-## Deploy with Netlify
+## Host the web app on GitHub Pages
 
-1. Import this GitHub repository into Netlify.
-2. Set the build publish directory to `.` and functions directory to `netlify/functions` (also configured in `netlify.toml`).
-3. In Netlify, open **Project configuration → Environment variables**.
-4. Add `GEMINI_API_KEY` with your Gemini API key. Never commit the key to GitHub or put it in browser code.
-5. Trigger a new deploy after adding the variable.
-6. Open the deployed site over HTTPS and test chat and microphone permissions.
+1. In the repository, open **Settings → Pages**.
+2. Under **Build and deployment**, choose **GitHub Actions**.
+3. The workflow in `.github/workflows/pages.yml` publishes the web app.
+4. Expected project-site URL: `https://pak-point.github.io/NAVEED-AI/` after Pages is enabled and the workflow succeeds.
 
-The backend uses Google's Gemini Interactions REST API. The browser's speech recognition support varies by browser and device; spoken replies use the browser's speech synthesis.
+## Secure Gemini backend on Cloudflare Workers
 
-## Security notes
+1. Create a Cloudflare account and open **Workers & Pages → Create → Worker**.
+2. Deploy the code from `cloudflare/worker.js` (or use Wrangler with `wrangler.toml`).
+3. In Worker **Settings → Variables and Secrets**, add secret `GEMINI_API_KEY`. Never commit or share the key.
+4. Set the frontend `API_URL` in `index.html` to the deployed Worker URL.
+5. The Worker currently permits browser requests only from `https://pak-point.github.io`.
 
-- Keep `GEMINI_API_KEY` only in Netlify's server-side environment variables.
-- Add rate limiting and authentication before sharing this public app widely.
-- Free API and hosting quotas may be limited and can change.
+## Notes
+
+- GitHub Pages serves static files only; Cloudflare Worker securely calls Gemini.
+- Browser microphone support depends on Chrome/ChromeOS permissions and supported speech APIs.
+- A browser PWA cannot provide Android-only functions such as torch control or guaranteed always-on background wake-word listening.
+- Hosting and Gemini usage are subject to provider quotas and terms.
