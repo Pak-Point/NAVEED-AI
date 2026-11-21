@@ -18,6 +18,7 @@ import android.speech.tts.TextToSpeech
 import android.view.Gravity
 import android.view.View
 import android.widget.*
+import com.google.firebase.Firebase
 import com.google.firebase.FirebaseApp
 import com.google.firebase.ai.type.GenerativeBackend
 import com.google.firebase.ai.ai
