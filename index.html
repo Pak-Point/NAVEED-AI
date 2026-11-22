@@ -41,7 +41,7 @@
   </section>
 </div>
 <script>
-const API_URL='https://YOUR-WORKER-NAME.YOUR-SUBDOMAIN.workers.dev';
+const API_URL='https://naveed-ai-api.nk7741595.workers.dev';
 const messagesEl=document.getElementById('messages'),promptEl=document.getElementById('prompt'),sendBtn=document.getElementById('send'),micBtn=document.getElementById('mic'),hint=document.getElementById('hint');
 let history=[],voiceReplies=true,recognition=null;
 function addMessage(text,who,extra=''){document.getElementById('welcome')?.remove();const el=document.createElement('div');el.className='msg '+who+(extra?' '+extra:'');el.textContent=text;messagesEl.appendChild(el);messagesEl.scrollTop=messagesEl.scrollHeight;return el}
